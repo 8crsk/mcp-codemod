@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-codemod"
+version = "0.1.0"
+description = "Codemod that migrates MCP Python SDK v1 code to v2 (spec 2026-07-28)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["mcp", "model-context-protocol", "codemod", "migration", "libcst"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
+
+# LibCST only. Deliberately does not depend on `mcp` itself: the tool has to
+# run in an environment that still has v1 installed, and pinning either major
+# version would make it uninstallable for half its users.
+dependencies = ["libcst>=1.4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+mcp-codemod = "mcp_codemod.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_codemod"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
