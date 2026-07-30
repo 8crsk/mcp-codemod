@@ -11,8 +11,8 @@ uniform find-and-replace:
 ``FIELD_RENAMES`` applies to **attribute access only**. The guide is explicit
 that v2 models still accept camelCase at construction time::
 
-    Tool(inputSchema={...})   # still valid in v2 — do not rewrite
-    tool.inputSchema          # broken in v2 — rewrite to .input_schema
+    Tool(inputSchema={...})   # still valid in v2, do not rewrite
+    tool.inputSchema          # broken in v2, rewrite to .input_schema
 
 A regex cannot tell those apart. Rewriting the constructor kwarg is not merely
 unnecessary, it is a regression: it changes working code for no reason and
@@ -87,7 +87,7 @@ CONTEXT_ATTR_RENAMES: dict[str, str] = {
 #: ``mcp.types`` moved to a standalone ``mcp-types`` distribution, but the
 #: guide is emphatic that this is a no-op for anyone depending on ``mcp``:
 #: "``mcp.types`` is a permanent alias that mirrors ``mcp_types`` exactly" and
-#: "Keep importing through ``mcp`` — the package you actually depend on —
+#: "Keep importing through ``mcp``, the package you actually depend on,
 #: rather than writing ``import mcp_types``, which would reach past your
 #: declared dependency into a transitive one."
 #:
@@ -142,7 +142,7 @@ ROOTMODEL_UNIONS: frozenset[str] = frozenset(
     }
 )
 
-#: Names removed with no drop-in replacement — each needs a human decision.
+#: Names removed with no drop-in replacement. Each needs a human decision.
 #: Source: "Removed type aliases and classes".
 REMOVED_NO_REPLACEMENT: dict[str, str] = {
     "Cursor": "use `str` directly for pagination cursors",
@@ -156,7 +156,7 @@ REMOVED_NO_REPLACEMENT: dict[str, str] = {
     "TASK_REQUIRED": "use string literals",
 }
 
-#: Deprecated but still functional — worth surfacing, never worth rewriting.
+#: Deprecated but still functional. Worth surfacing, never worth rewriting.
 #: Source: "`SUPPORTED_PROTOCOL_VERSIONS` deprecated".
 DEPRECATED_NAMES: dict[str, str] = {
     "SUPPORTED_PROTOCOL_VERSIONS": (
@@ -219,7 +219,7 @@ CHECKS: dict[str, str] = {
     "F003": (
         "httpx / httpx-sse imported. The SDK now uses httpx2. Only the objects "
         "handed to the SDK need to change type, so unrelated httpx usage in "
-        "your project can stay — which is why this is not rewritten for you."
+        "your project can stay, which is why this is not rewritten for you."
     ),
     "F004": "Imported name was removed in v2 with no drop-in replacement.",
     "F005": (

@@ -198,7 +198,7 @@ def test_meta_progress_token_is_reported_not_renamed() -> None:
     """RequestParamsMeta needs dict access, which is a different expression.
 
     ``progressToken`` is in the snake_case rename table, so the naive result
-    would be ``meta.progress_token`` — still broken, because meta is a
+    would be ``meta.progress_token``, still broken, because meta is a
     TypedDict now. The receiver name disambiguates it.
     """
     before = """\

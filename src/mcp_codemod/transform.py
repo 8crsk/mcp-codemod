@@ -87,7 +87,7 @@ def _timedelta_seconds(call: cst.Call) -> float | None:
     """Total seconds for a ``timedelta(...)`` built from numeric literals.
 
     Returns None when the call uses positional arguments, non-literal values,
-    or an unrecognised unit — all cases where guessing would be worse than
+    or an unrecognised unit. All are cases where guessing would be worse than
     reporting.
     """
     if not call.args:
@@ -342,7 +342,7 @@ class MCPv2Codemod(cst.CSTTransformer):
             )
             return updated
 
-        # RequestParams.Meta is now a TypedDict — attribute access must become
+        # RequestParams.Meta is now a TypedDict, so attribute access must become
         # dict access, which is a different expression shape, not a rename.
         if isinstance(receiver, cst.Name) and receiver.value in _META_RECEIVERS:
             if attr in ("progressToken", "progress_token"):
@@ -389,7 +389,7 @@ class MCPv2Codemod(cst.CSTTransformer):
         Not auto-fixed on purpose. We cannot statically prove the receiver is
         an MCP protocol type, and adding ``by_alias=True`` to an unrelated
         Pydantic model would corrupt *that* model's output. The guide calls
-        this silent — the wrong shape goes on the wire and nothing raises — so
+        this silent (the wrong shape goes on the wire and nothing raises), so
         a report is the safe intervention.
         """
         if not self._imports_mcp:

@@ -1,36 +1,41 @@
 # mcp-codemod
 
-Migrates MCP Python SDK **v1** code to **v2** (the 2026-07-28 spec revision).
+Migrates MCP Python SDK v1 code to v2 (the 2026-07-28 spec revision).
 
-The TypeScript and Go SDKs ship a codemod for this. Python does not — Python
-gets a 2,879-line migration guide and a lot of find-and-replace. This is that
-missing codemod.
+The TypeScript and Go SDKs ship a codemod for this migration. Python does not.
+Python developers get a 2,879-line migration guide and a lot of manual
+find-and-replace. This tool fills that gap.
+
+## Installation
 
 ```bash
 pip install mcp-codemod
-mcp-codemod path/to/your/server        # dry run: prints a diff, changes nothing
-mcp-codemod path/to/your/server --write
 ```
 
-Dry run is the default on purpose. A tool that rewrites your source tree the
-first time you try it, before you know whether it's any good, doesn't get a
-second try.
+## Usage
 
-## Why not `sed`
+```bash
+mcp-codemod path/to/your/server           # dry run, prints a diff
+mcp-codemod path/to/your/server --write   # applies the changes
+```
 
-Because `sed` corrupts working code. The v2 models still accept camelCase at
-construction time, and only *attribute access* changed:
+Dry run is the default. Review the diff before writing.
+
+## Why not find-and-replace
+
+The v2 models still accept camelCase at construction time. Only attribute
+access changed:
 
 ```python
-tool = Tool(name="forecast", inputSchema={"type": "object"})   # still valid in v2
+tool = Tool(name="forecast", inputSchema={"type": "object"})   # valid in v2
 print(tool.inputSchema)                                        # broken in v2
 ```
 
-`sed -i 's/inputSchema/input_schema/g'` breaks the first line. `mcp-codemod`
-doesn't, because in the concrete syntax tree a keyword argument is a `Name`
-node and attribute access is an `Attribute` node — visiting only `Attribute`
-nodes cannot reach the kwarg. Same file, three lines apart, handled
-differently:
+Running `sed -i 's/inputSchema/input_schema/g'` breaks the first line while
+fixing the second. This tool handles both correctly because it operates on the
+concrete syntax tree, where a keyword argument is a `Name` node and attribute
+access is an `Attribute` node. Visiting only `Attribute` nodes cannot reach the
+keyword argument.
 
 ```diff
  tool = Tool(name="forecast", inputSchema={"type": "object"})
@@ -38,91 +43,91 @@ differently:
 +print(tool.input_schema, tool.output_schema)
 ```
 
-It's built on [LibCST](https://github.com/Instagram/LibCST) rather than `ast`
-for the same reason: `ast` discards formatting, so a round-trip reflows your
-file, strips comments, and normalises quotes. The resulting diff is
-unreviewable. LibCST preserves every byte it doesn't deliberately change, so
-the diff contains the migration and nothing else.
+The implementation uses [LibCST](https://github.com/Instagram/LibCST) rather
+than the standard library `ast` module. A round trip through `ast` discards
+formatting: it reflows the file, strips comments, and normalises quote style.
+LibCST preserves every byte it does not deliberately change, so the resulting
+diff contains only the migration.
 
-## What it rewrites
+## Changes applied automatically
 
 | Change | Example |
 |---|---|
-| `FastMCP` → `MCPServer` | `mcp = FastMCP("x")` → `mcp = MCPServer("x")` |
-| `mcp.server.fastmcp.*` → `mcp.server.mcpserver.*` | including all submodules |
-| `McpError` → `MCPError` | |
-| camelCase → snake_case attribute access | 11 fields: `inputSchema`, `isError`, `nextCursor`, `mimeType`, … |
-| `ctx.fastmcp` → `ctx.mcp_server` | only on parameters annotated `Context` |
-| `Content` → `ContentBlock` | |
-| `ResourceReference` → `ResourceTemplateReference` | |
-| `ClientRequestType` → `ClientRequest` | and the five other `*Type` unions |
-| `streamablehttp_client` → `streamable_http_client` | |
-| `mcp.shared.version` → `mcp.types.version` | module was removed |
-| `timedelta` timeouts → float seconds | `read_timeout_seconds=timedelta(minutes=2)` → `=120` |
+| `FastMCP` to `MCPServer` | `mcp = FastMCP("x")` becomes `mcp = MCPServer("x")` |
+| `mcp.server.fastmcp.*` to `mcp.server.mcpserver.*` | includes all submodules |
+| `McpError` to `MCPError` | |
+| camelCase to snake_case attribute access | 11 fields including `inputSchema`, `isError`, `nextCursor`, `mimeType` |
+| `ctx.fastmcp` to `ctx.mcp_server` | only on parameters annotated `Context` |
+| `Content` to `ContentBlock` | |
+| `ResourceReference` to `ResourceTemplateReference` | |
+| `ClientRequestType` to `ClientRequest` | and the five other `*Type` unions |
+| `streamablehttp_client` to `streamable_http_client` | |
+| `mcp.shared.version` to `mcp.types.version` | module was removed in v2 |
+| `timedelta` timeouts to float seconds | `read_timeout_seconds=timedelta(minutes=2)` becomes `=120` |
 
-## What it reports instead of rewriting
+## Changes reported for manual review
 
-Some v2 changes depend on runtime types or on intent the source doesn't
-express. Guessing at those would be worse than leaving them alone, so they're
-reported and the source is left byte-identical.
+Some v2 changes depend on runtime types, or on intent that the source code does
+not express. Applying those automatically would risk introducing bugs, so they
+are reported and the source is left unmodified.
 
-| Code | What |
+| Code | Description |
 |---|---|
-| **F001** | `model_dump()` without `by_alias=True` |
-| F002 | `.root` access on a union that's no longer a `RootModel` |
-| F003 | `httpx` / `httpx-sse` imported; the SDK moved to `httpx2` |
-| F004 | Name removed in v2 with no drop-in replacement (`Cursor`, `AnyFunction`, …) |
-| F005 | `RequestParams.Meta` is now a TypedDict — attribute access becomes `.get()` |
+| F001 | `model_dump()` without `by_alias=True` |
+| F002 | `.root` access on a union that is no longer a `RootModel` |
+| F003 | `httpx` or `httpx-sse` imported, SDK moved to `httpx2` |
+| F004 | Name removed in v2 with no drop-in replacement (`Cursor`, `AnyFunction`, others) |
+| F005 | `RequestParams.Meta` is now a TypedDict, attribute access becomes `.get()` |
 | F006 | Deprecated name (`SUPPORTED_PROTOCOL_VERSIONS`) |
 | F007 | `timedelta` timeout too dynamic to convert safely |
-| F008 | Lowlevel `@server.list_tools()` decorator → `on_list_tools=` constructor param |
+| F008 | Lowlevel `@server.list_tools()` decorator, now an `on_list_tools=` constructor parameter |
 
-**F001 is the one to care about.** In v1, `model_dump()` emitted camelCase
-because the fields themselves were camelCase. In v2 it emits snake_case, which
-other MCP implementations don't recognise. The migration guide's own words:
+F001 deserves particular attention. In v1, `model_dump()` emitted camelCase
+because the model fields themselves were camelCase. In v2 the same call emits
+snake_case, which other MCP implementations will not recognise. The migration
+guide describes the consequence directly:
 
 > No error is raised; the output is silently in the wrong shape.
 
-It isn't auto-fixed because we can't statically prove the receiver is an MCP
-protocol type, and adding `by_alias=True` to an unrelated Pydantic model would
-corrupt *that* model's output.
+This is not corrected automatically because the receiver cannot be statically
+proven to be an MCP protocol type. Adding `by_alias=True` to an unrelated
+Pydantic model would corrupt that model's output instead.
 
-## What it deliberately won't do
+## Imports that are intentionally left alone
 
-`mcp.types` moved to a standalone `mcp-types` distribution, but the guide is
-emphatic that this is a no-op if you depend on `mcp`:
+The `mcp.types` module moved to a standalone `mcp-types` distribution, but this
+is a no-op for projects that depend on `mcp`. The migration guide is explicit:
 
 > `mcp.types` is a permanent alias that mirrors `mcp_types` exactly. Keep
-> importing through `mcp` — the package you actually depend on — rather than
+> importing through `mcp`, the package you actually depend on, rather than
 > writing `import mcp_types`, which would reach past your declared dependency
 > into a transitive one.
 
-So `mcp-codemod` never rewrites `mcp.types` → `mcp_types`. That's a tested
-guarantee, not an accident of implementation.
+Rewriting those imports would introduce an undeclared dependency, so
+`mcp-codemod` never does. There is a test covering this.
 
-## Use it with `mcp-migration`, not instead of it
+## Relationship to mcp-migration
 
-[`mcp-migration`](https://pypi.org/project/mcp-migration/) finds *behavioural*
-hazards a codemod can't rewrite — in-memory state mutated inside tool handlers,
-session-id dependencies, live-server readiness probing. It explicitly isn't a
-codemod. This is explicitly not a hazard detector. Run both:
+[`mcp-migration`](https://pypi.org/project/mcp-migration/) detects behavioural
+hazards that a codemod cannot rewrite, such as in-memory state mutated inside
+tool handlers, session-id dependencies, and live server readiness. It is not a
+codemod. This tool is not a hazard detector. The two are complementary:
 
 ```bash
-mcp-codemod .          # rewrite the mechanical changes
-mcp-migration scan .   # then find the behavioural hazards
+mcp-codemod .          # apply the mechanical changes
+mcp-migration scan .   # then check for behavioural hazards
 ```
 
 ## Limitations
 
-- Covers the changes in the guide's "changes almost every project hits" table
-  plus the removed-alias set. The guide is 2,879 lines; this is not all of it.
-- Rewrites are gated on the file importing `mcp`. A module that touches MCP
-  types without importing anything from `mcp` is skipped.
-- Symbol renames are name-based. A local variable called `Content` in a file
-  that also imports `mcp` would be renamed. Read the diff.
-- No import reordering — that's `isort`'s job, not this tool's.
-
-Read the diff before passing `--write`. That's what the dry run is for.
+* Coverage is the migration guide's "changes almost every project hits" table
+  plus the removed-alias set. The full guide is 2,879 lines and this tool does
+  not implement all of it.
+* Rewrites are skipped in files that do not import `mcp`. A module that handles
+  MCP types without importing from `mcp` will not be processed.
+* Symbol renames are name-based. A local variable named `Content` in a file that
+  also imports `mcp` would be renamed. Review the diff.
+* Import order is left untouched. Use `isort` if you need it.
 
 ## Development
 
@@ -131,6 +136,10 @@ pip install -e ".[dev]"
 pytest
 ```
 
+## Author
+
+Sanjay Keerthan ([@8crsk](https://github.com/8crsk))
+
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).

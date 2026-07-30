@@ -57,7 +57,7 @@ def test_constructor_kwargs_are_left_alone() -> None:
     """The differentiator.
 
     The migration guide states v2 models still accept camelCase at
-    construction. Rewriting these would change working code for no reason —
+    construction. Rewriting these would change working code for no reason,
     exactly the regression a textual find-and-replace introduces.
     """
     before = """\
