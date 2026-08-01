@@ -1,0 +1,68 @@
+name: publish
+
+# Publishes to PyPI when a GitHub Release is published.
+#
+# Authentication uses PyPI Trusted Publishing (OpenID Connect). There is no API
+# token stored in this repository and none is needed: GitHub mints a short-lived
+# identity token for this specific workflow, and PyPI verifies it against the
+# publisher configured on the project. Nothing to leak, expire, or paste.
+on:
+  release:
+    types: [published]
+
+  # Allows a manual run from the Actions tab, useful for re-running a failed
+  # publish without cutting a new release.
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build distributions
+        run: |
+          pip install build
+          python -m build
+
+      # The tests are cheap and a broken release is expensive, so gate the
+      # upload on them rather than assuming the push-time run still holds.
+      - name: Run tests against the built package
+        run: |
+          python -m venv /tmp/check
+          /tmp/check/bin/pip install dist/*.whl pytest
+          /tmp/check/bin/python -m pytest -q
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    # The environment name must match what is configured on PyPI if you set one
+    # there. Leaving it configured here is harmless and makes the deployment
+    # visible in the repository's Environments tab.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/mcp-codemod
+
+    permissions:
+      # Required for Trusted Publishing. Without this the OIDC token is not
+      # issued and PyPI has nothing to verify.
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
