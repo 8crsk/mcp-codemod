@@ -28,8 +28,10 @@ from .rules import (
     DO_NOT_REWRITE_MODULES,
     FIELD_RENAMES,
     MODEL_DUMP_METHODS,
+    LOWLEVEL_HANDLERS,
     MODULE_PREFIX_MOVES,
     MOVED_TRANSPORT_KWARGS,
+    REMOVED_CONTEXT_ACCESSORS,
     REMOVED_NO_REPLACEMENT,
     ROOTMODEL_UNIONS,
     SERVER_CONSTRUCTORS,
@@ -40,23 +42,9 @@ from .rules import (
 )
 
 #: Lowlevel ``Server`` decorator handlers replaced by constructor ``on_*``
-#: parameters in v2. Source: "Lowlevel Server decorator-based handlers replaced
-#: with constructor on_* params".
-_LOWLEVEL_DECORATORS = frozenset(
-    {
-        "list_tools",
-        "call_tool",
-        "list_resources",
-        "read_resource",
-        "list_resource_templates",
-        "list_prompts",
-        "get_prompt",
-        "set_logging_level",
-        "subscribe_resource",
-        "unsubscribe_resource",
-        "complete",
-    }
-)
+#: parameters in v2. The authoritative table, including each handler's params
+#: and return types, lives in ``rules.LOWLEVEL_HANDLERS``.
+_LOWLEVEL_DECORATORS = frozenset(LOWLEVEL_HANDLERS)
 
 #: Receiver names that indicate a request-params meta mapping rather than a
 #: protocol model, so ``.progressToken`` needs dict access, not a rename.
@@ -215,6 +203,17 @@ class MCPv2Codemod(cst.CSTTransformer):
                     f"{REMOVED_NO_REPLACEMENT[imported]}.",
                     "removed-type-aliases-and-classes",
                 )
+            if module.startswith("mcp") and imported == "request_ctx":
+                self._report(
+                    "F010",
+                    node,
+                    "`request_ctx` was removed in v2: "
+                    f"{REMOVED_CONTEXT_ACCESSORS['request_ctx']}. The request "
+                    "context is now passed to each handler as its first "
+                    "argument (`ctx: ServerRequestContext`), so read it from "
+                    "there instead of the contextvar.",
+                    "lowlevel-server-request_context-property-removed",
+                )
             if module.startswith("mcp") and imported in DEPRECATED_NAMES:
                 self._report(
                     "F006",
@@ -249,12 +248,18 @@ class MCPv2Codemod(cst.CSTTransformer):
             return
         handler = target.attr.value
         if handler in _LOWLEVEL_DECORATORS:
+            kwarg, params_type, return_type = LOWLEVEL_HANDLERS[handler]
             self._report(
                 "F008",
                 node,
-                f"Lowlevel `@…{handler}()` decorator. v2 replaces decorator "
-                f"handlers with an `on_{handler}=` constructor parameter on "
-                "Server; the rewrite depends on where you construct it.",
+                f"Lowlevel `@…{handler}()` decorator. In v2, pass "
+                f"`{kwarg}=<handler>` to the Server(...) constructor instead. "
+                f"The handler signature becomes "
+                f"`(ctx: ServerRequestContext, params: {params_type}) -> "
+                f"{return_type}`, and it must return a full {return_type} "
+                "rather than an unwrapped value. Note the constructor is "
+                "usually written above the handlers, so it has to move below "
+                "them (or reference them lazily) to avoid NameError.",
                 "lowlevel-server-decorator-based-handlers-replaced-with-"
                 "constructor-on_-params",
             )
@@ -335,6 +340,21 @@ class MCPv2Codemod(cst.CSTTransformer):
 
         attr = updated.attr.value
         receiver = updated.value
+
+        # `server.request_context` was removed; the context is now an argument.
+        # Gated on the file using the lowlevel Server, because `request_context`
+        # is a plausible attribute name on unrelated objects.
+        if attr == "request_context" and self._uses_lowlevel_server:
+            self._report(
+                "F010",
+                original,
+                "`.request_context` was removed in v2: "
+                f"{REMOVED_CONTEXT_ACCESSORS['request_context']}. Handlers "
+                "receive the context as their first argument "
+                "(`ctx: ServerRequestContext`); use that instead.",
+                "lowlevel-server-request_context-property-removed",
+            )
+            return updated
 
         # `.root` on a union type that is no longer a RootModel.
         if attr == "root" and self._imported_names & ROOTMODEL_UNIONS:

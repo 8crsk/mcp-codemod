@@ -168,6 +168,84 @@ MOVED_TRANSPORT_KWARGS: dict[str, str] = {
 #: rename has been applied.
 SERVER_CONSTRUCTORS: frozenset[str] = frozenset({"FastMCP", "MCPServer"})
 
+#: Lowlevel ``Server`` handler migration: v1 decorator -> (v2 constructor
+#: keyword, params type, return type).
+#:
+#: This migration is deliberately not automated. Three things change at once:
+#: registration moves to the constructor, the signature becomes
+#: ``(ctx, params)``, and the handler must return the full result type instead
+#: of an unwrapped value. The last two require rewriting the handler body,
+#: which means understanding what the body does. A codemod that moved the
+#: registration and left the signature alone would produce code that imports
+#: cleanly and fails on the first request.
+#:
+#: There is also an ordering trap: the constructor is almost always written
+#: above the handlers, so mechanically inserting ``on_list_tools=handler``
+#: raises NameError at import time.
+#:
+#: What this table buys is precision. Instead of "this needs work", the tool
+#: names the exact keyword, params type, and return type for each handler.
+#: Source: "Lowlevel `Server`: decorator-based handlers replaced with
+#: constructor `on_*` params".
+LOWLEVEL_HANDLERS: dict[str, tuple[str, str, str]] = {
+    "list_tools": ("on_list_tools", "PaginatedRequestParams | None", "ListToolsResult"),
+    "call_tool": ("on_call_tool", "CallToolRequestParams", "CallToolResult"),
+    "list_resources": (
+        "on_list_resources",
+        "PaginatedRequestParams | None",
+        "ListResourcesResult",
+    ),
+    "list_resource_templates": (
+        "on_list_resource_templates",
+        "PaginatedRequestParams | None",
+        "ListResourceTemplatesResult",
+    ),
+    "read_resource": (
+        "on_read_resource",
+        "ReadResourceRequestParams",
+        "ReadResourceResult",
+    ),
+    "subscribe_resource": (
+        "on_subscribe_resource",
+        "SubscribeRequestParams",
+        "EmptyResult",
+    ),
+    "unsubscribe_resource": (
+        "on_unsubscribe_resource",
+        "UnsubscribeRequestParams",
+        "EmptyResult",
+    ),
+    "list_prompts": (
+        "on_list_prompts",
+        "PaginatedRequestParams | None",
+        "ListPromptsResult",
+    ),
+    "get_prompt": ("on_get_prompt", "GetPromptRequestParams", "GetPromptResult"),
+    "completion": ("on_completion", "CompleteRequestParams", "CompleteResult"),
+    "set_logging_level": (
+        "on_set_logging_level",
+        "SetLevelRequestParams",
+        "EmptyResult",
+    ),
+    "progress_notification": (
+        "on_progress",
+        "ProgressNotificationParams",
+        "None",
+    ),
+}
+
+#: Ways v1 code reached the request context. Both were removed outright in v2;
+#: the context now arrives as the handler's first argument.
+#: Source: "Lowlevel `Server`: `request_context` property removed".
+REMOVED_CONTEXT_ACCESSORS: dict[str, str] = {
+    "request_ctx": (
+        "the module-level `request_ctx` contextvar was removed entirely"
+    ),
+    "request_context": (
+        "the `server.request_context` property was removed"
+    ),
+}
+
 #: Union types that stopped being ``RootModel`` subclasses, so ``.root`` access
 #: and direct ``model_validate()`` no longer work.
 #: Source: "Replace `RootModel` by union types with `TypeAdapter` validation".
@@ -275,8 +353,16 @@ CHECKS: dict[str, str] = {
     ),
     "F008": (
         "Lowlevel Server decorator-based handler. v2 replaces these with "
-        "constructor on_* parameters; the rewrite depends on your server's "
-        "construction site, so it is left to you."
+        "constructor on_* parameters, and changes the handler signature to "
+        "(ctx, params) and the return type to the full result object. The "
+        "finding names the exact keyword, params type, and return type for "
+        "the handler it found. Not automated: the signature and return "
+        "changes require rewriting the handler body."
+    ),
+    "F010": (
+        "Request context accessed through `request_ctx` or "
+        "`server.request_context`. Both were removed in v2. The context is "
+        "now the handler's first argument."
     ),
     "F009": (
         "Transport parameter passed to the MCPServer constructor. These moved "

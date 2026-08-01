@@ -99,6 +99,7 @@ are reported and the source is left unmodified.
 | F007 | `timedelta` timeout too dynamic to convert safely |
 | F008 | Lowlevel `@server.list_tools()` decorator, now an `on_list_tools=` constructor parameter |
 | F009 | Transport parameter (`host`, `port`, `stateless_http`, others) still on the `MCPServer` constructor |
+| F010 | `request_ctx` or `server.request_context`, both removed in v2 |
 
 F001 deserves particular attention. In v1, `model_dump()` emitted camelCase
 because the model fields themselves were camelCase. In v2 the same call emits
@@ -122,6 +123,31 @@ mcp = MCPServer("demo", host="127.0.0.1", port=8788)   # crashes in v2
 They are not moved automatically because the destination is a different call
 site, which may be elsewhere in the file, in another module, or absent when
 the server is mounted as an ASGI app.
+
+## If you use the lowlevel `Server`
+
+That migration is not automated, and the reason is worth stating plainly.
+Three things change at once: registration moves to the constructor, the
+handler signature becomes `(ctx, params)`, and the handler must return the
+full result type instead of an unwrapped value. The last two mean rewriting
+the body, which means understanding what the body does. There is also an
+ordering trap, since the constructor is normally written above the handlers,
+so inserting `on_list_tools=handler` there raises `NameError` at import.
+
+What the tool does instead is name the exact replacement for every handler it
+finds:
+
+```
+F008 stdio_server.py:56: Lowlevel `@…list_tools()` decorator. In v2, pass
+`on_list_tools=<handler>` to the Server(...) constructor instead. The handler
+signature becomes `(ctx: ServerRequestContext, params: PaginatedRequestParams
+| None) -> ListToolsResult`, and it must return a full ListToolsResult rather
+than an unwrapped value.
+```
+
+That covers all twelve lowlevel handlers, each with its own params and return
+type. F010 additionally catches `request_ctx` and `server.request_context`,
+which were removed outright.
 
 ## Imports that are intentionally left alone
 

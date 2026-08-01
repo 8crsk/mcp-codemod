@@ -339,6 +339,92 @@ async def call_tool(name, args):
     assert "on_list_tools=" in findings[0].message
 
 
+def test_lowlevel_finding_names_the_exact_replacement() -> None:
+    """F008 must be actionable, not just a warning that work exists.
+
+    The v2 migration changes three things at once: registration moves to the
+    constructor, the signature becomes (ctx, params), and the return value
+    must be the full result type. Naming all three per handler is the whole
+    value the tool can add here, since the rewrite itself is not safe.
+    """
+    before = """\
+from mcp.server.lowlevel import Server
+
+server = Server("demo")
+
+
+@server.call_tool()
+async def handle(name, arguments):
+    return []
+"""
+    _, findings, _ = run(before)
+    assert [f.code for f in findings] == ["F008"]
+    msg = findings[0].message
+    assert "on_call_tool" in msg
+    assert "CallToolRequestParams" in msg
+    assert "CallToolResult" in msg
+    assert "NameError" in msg, "the constructor ordering trap must be called out"
+
+
+def test_each_lowlevel_handler_maps_to_its_own_types() -> None:
+    before = """\
+from mcp.server.lowlevel import Server
+
+server = Server("demo")
+
+
+@server.list_prompts()
+async def prompts():
+    return []
+
+
+@server.read_resource()
+async def read(uri):
+    return b""
+"""
+    _, findings, _ = run(before)
+    assert [f.code for f in findings] == ["F008", "F008"]
+    joined = " ".join(f.message for f in findings)
+    assert "on_list_prompts" in joined and "ListPromptsResult" in joined
+    assert "on_read_resource" in joined and "ReadResourceRequestParams" in joined
+
+
+def test_request_ctx_import_is_reported() -> None:
+    before = "from mcp.server.lowlevel.server import request_ctx\n"
+    after, findings, _ = run(before)
+    assert after == before, "F010 has no mechanical replacement"
+    assert [f.code for f in findings] == ["F010"]
+    assert "removed entirely" in findings[0].message
+
+
+def test_server_request_context_property_is_reported() -> None:
+    before = """\
+from mcp.server.lowlevel import Server
+
+server = Server("demo")
+
+
+@server.call_tool()
+async def handle(name, arguments):
+    ctx = server.request_context
+    return []
+"""
+    after, findings, _ = run(before)
+    assert "server.request_context" in after, "F010 must not be rewritten"
+    assert {f.code for f in findings} == {"F008", "F010"}
+
+
+def test_request_context_on_unrelated_objects_is_ignored() -> None:
+    """`request_context` is a plausible attribute name outside the SDK."""
+    before = """\
+import mcp
+
+ctx = my_framework.request_context
+"""
+    _, findings, _ = run(before)
+    assert findings == []
+
+
 def test_lowlevel_decorator_names_on_non_lowlevel_code_are_ignored() -> None:
     before = """\
 import mcp
