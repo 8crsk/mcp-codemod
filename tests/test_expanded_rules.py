@@ -180,6 +180,44 @@ client = httpx.AsyncClient(follow_redirects=True)
     assert [f.code for f in findings] == ["F003"]
 
 
+def test_httpx_in_a_file_that_does_not_touch_mcp_is_not_reported() -> None:
+    """Regression: F003 used to fire on any file importing httpx.
+
+    Found by running the codemod over agentic-ops/legal-mcp, where every
+    finding was F003 against HTTP client modules that have nothing to do with
+    the MCP SDK. A project's unrelated networking code is not our business.
+    """
+    before = """\
+import httpx
+
+async def fetch(url):
+    async with httpx.AsyncClient() as client:
+        return await client.get(url)
+"""
+    _, findings, changed = run(before)
+    assert findings == []
+    assert not changed
+
+
+def test_httpx_imported_before_mcp_is_still_reported() -> None:
+    """The guard must not become order-dependent.
+
+    Import sorters put `httpx` above `mcp`, so deciding at visit time would
+    trade the false positive above for a false negative here.
+    """
+    before = """\
+import httpx
+
+from mcp.types import Tool
+
+def build(client: httpx.AsyncClient) -> Tool:
+    return Tool(name="x", inputSchema={})
+"""
+    _, findings, _ = run(before)
+    assert [f.code for f in findings] == ["F003"]
+    assert findings[0].line == 1
+
+
 def test_removed_name_without_replacement_is_reported() -> None:
     before = "from mcp.types import Cursor\n"
     after, findings, _ = run(before)

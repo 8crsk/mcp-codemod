@@ -134,6 +134,12 @@ class MCPv2Codemod(cst.CSTTransformer):
         self._imported_names: set[str] = set()
         self._uses_lowlevel_server = False
         self._context_params: set[str] = set()
+        # F003 cannot be decided when the httpx import is seen, because an
+        # `import httpx` frequently sorts above the `mcp` import in the same
+        # file. Gating it on `_imports_mcp` at that moment would miss genuine
+        # cases. Candidates are collected here and flushed in `leave_Module`,
+        # once the whole file has been read and the guard is known.
+        self._pending_httpx: list[tuple[int, str]] = []
 
     # -- helpers ---------------------------------------------------------
 
@@ -155,15 +161,15 @@ class MCPv2Codemod(cst.CSTTransformer):
             if name == "mcp" or name.startswith("mcp."):
                 self._imports_mcp = True
             if name in ("httpx", "httpx_sse"):
-                self._report(
-                    "F003",
-                    node,
-                    f"{name} imported; the SDK now uses httpx2. Objects you "
-                    "hand to the SDK (http_client, auth, httpx_client_factory "
-                    "results) must become httpx2 types. Unrelated httpx usage "
-                    "in your project can stay, which is why this is not "
-                    "rewritten for you.",
-                    "httpx-and-httpx-sse-replaced-by-httpx2",
+                self._pending_httpx.append(
+                    (
+                        self._line(node),
+                        f"{name} imported; the SDK now uses httpx2. Objects you "
+                        "hand to the SDK (http_client, auth, "
+                        "httpx_client_factory results) must become httpx2 "
+                        "types. Unrelated httpx usage in your project can "
+                        "stay, which is why this is not rewritten for you.",
+                    )
                 )
 
     def visit_ImportFrom(self, node: cst.ImportFrom) -> None:
@@ -176,11 +182,11 @@ class MCPv2Codemod(cst.CSTTransformer):
         if module == "mcp" or module.startswith("mcp."):
             self._imports_mcp = True
         if module in ("httpx", "httpx_sse"):
-            self._report(
-                "F003",
-                node,
-                f"{module} imported; the SDK now uses httpx2.",
-                "httpx-and-httpx-sse-replaced-by-httpx2",
+            self._pending_httpx.append(
+                (
+                    self._line(node),
+                    f"{module} imported; the SDK now uses httpx2.",
+                )
             )
         if "lowlevel" in module:
             self._uses_lowlevel_server = True
@@ -447,6 +453,30 @@ class MCPv2Codemod(cst.CSTTransformer):
         if touched:
             self.changed = True
             return updated.with_changes(args=new_args)
+        return updated
+
+
+    def leave_Module(
+        self, original: cst.Module, updated: cst.Module
+    ) -> cst.Module:
+        """Emit deferred findings now that the whole file has been read.
+
+        An httpx import only matters here if this file also touches the MCP
+        SDK. A project's unrelated HTTP client code is not this tool's
+        business, and reporting it was the difference between a useful signal
+        and noise on real codebases.
+        """
+        if self._imports_mcp:
+            for line, message in self._pending_httpx:
+                self.findings.append(
+                    Finding(
+                        "F003",
+                        line,
+                        message,
+                        "httpx-and-httpx-sse-replaced-by-httpx2",
+                    )
+                )
+        self._pending_httpx.clear()
         return updated
 
 
