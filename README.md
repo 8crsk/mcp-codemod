@@ -1,5 +1,9 @@
 # mcp-codemod
 
+[![tests](https://github.com/8crsk/mcp-codemod/actions/workflows/test.yml/badge.svg)](https://github.com/8crsk/mcp-codemod/actions/workflows/test.yml)
+[![PyPI](https://img.shields.io/pypi/v/mcp-codemod)](https://pypi.org/project/mcp-codemod/)
+[![Python](https://img.shields.io/pypi/pyversions/mcp-codemod)](https://pypi.org/project/mcp-codemod/)
+
 Migrates MCP Python SDK v1 code to v2 (the 2026-07-28 spec revision).
 
 The TypeScript and Go SDKs ship a codemod for this migration. Python does not.
@@ -9,8 +13,21 @@ find-and-replace. This tool fills that gap.
 ## Installation
 
 ```bash
+pipx install mcp-codemod
+```
+
+`pipx` is the recommended way to install a command-line tool. It keeps the tool
+in its own environment and puts the command on your PATH.
+
+If you would rather install into an existing virtualenv, `pip` works too:
+
+```bash
 pip install mcp-codemod
 ```
+
+Note that on Ubuntu 24.04, Debian 12, Fedora, and other distributions that mark
+the system Python as externally managed (PEP 668), a bare `pip install` outside
+a virtualenv will be refused. Use `pipx` there.
 
 ## Usage
 
