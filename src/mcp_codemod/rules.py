@@ -127,6 +127,47 @@ TIMEDELTA_UNITS: dict[str, float] = {
 #: Methods whose output shape silently changed. See F001.
 MODEL_DUMP_METHODS: frozenset[str] = frozenset({"model_dump", "model_dump_json"})
 
+#: Transport parameters that moved off the MCPServer constructor onto run(),
+#: sse_app(), and streamable_http_app(). Passing any of these to the
+#: constructor raises TypeError at startup in v2.
+#:
+#: These are not rewritten because the destination is a different call site:
+#: the matching run() call may be elsewhere in the file, in another module, or
+#: absent entirely when the server is mounted as an ASGI app. Moving them
+#: automatically would mean guessing which call site the author meant.
+#: Source: "Transport-specific parameters moved from MCPServer constructor to
+#: run()/app methods".
+MOVED_TRANSPORT_KWARGS: dict[str, str] = {
+    "host": "run() only",
+    "port": "run() only; the app factories reject it",
+    "sse_path": 'run(transport="sse", ...) or sse_app()',
+    "message_path": 'run(transport="sse", ...) or sse_app()',
+    "streamable_http_path": (
+        'run(transport="streamable-http", ...) or streamable_http_app()'
+    ),
+    "json_response": (
+        'run(transport="streamable-http", ...) or streamable_http_app()'
+    ),
+    "stateless_http": (
+        'run(transport="streamable-http", ...) or streamable_http_app()'
+    ),
+    "max_request_body_size": (
+        'run(transport="streamable-http", ...) or streamable_http_app()'
+    ),
+    "event_store": (
+        'run(transport="streamable-http", ...) or streamable_http_app()'
+    ),
+    "retry_interval": (
+        'run(transport="streamable-http", ...) or streamable_http_app()'
+    ),
+    "transport_security": "run() or either app method",
+}
+
+#: Names the server class may go by at a construction site. The v1 spelling is
+#: included because detection runs against the original source, before the
+#: rename has been applied.
+SERVER_CONSTRUCTORS: frozenset[str] = frozenset({"FastMCP", "MCPServer"})
+
 #: Union types that stopped being ``RootModel`` subclasses, so ``.root`` access
 #: and direct ``model_validate()`` no longer work.
 #: Source: "Replace `RootModel` by union types with `TypeAdapter` validation".
@@ -236,5 +277,12 @@ CHECKS: dict[str, str] = {
         "Lowlevel Server decorator-based handler. v2 replaces these with "
         "constructor on_* parameters; the rewrite depends on your server's "
         "construction site, so it is left to you."
+    ),
+    "F009": (
+        "Transport parameter passed to the MCPServer constructor. These moved "
+        "to run() and the app factories in v2 and now raise TypeError at "
+        "startup. Renaming the class without moving these leaves code that "
+        "looks migrated and crashes on launch, so this check exists to make "
+        "the remaining work visible."
     ),
 }

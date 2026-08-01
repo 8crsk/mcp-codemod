@@ -180,6 +180,59 @@ client = httpx.AsyncClient(follow_redirects=True)
     assert [f.code for f in findings] == ["F003"]
 
 
+def test_transport_kwargs_on_the_constructor_are_reported() -> None:
+    """Regression: renaming the class alone left code that crashes on startup.
+
+    Found by running the codemod against glassflow/navflow, which constructs
+    FastMCP with host= and port=. Those moved onto run() in v2, so a rename
+    without this warning produces a diff that looks finished and raises
+    TypeError the moment the server launches.
+    """
+    before = """\
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("demo", host="127.0.0.1", port=8788)
+"""
+    after, findings, changed = run(before)
+    assert changed
+    assert 'MCPServer("demo", host="127.0.0.1", port=8788)' in after, (
+        "the arguments are reported, not removed"
+    )
+    assert [f.code for f in findings] == ["F009"]
+    assert "host" in findings[0].message and "port" in findings[0].message
+    assert "TypeError" in findings[0].message
+
+
+def test_all_moved_transport_kwargs_are_detected() -> None:
+    before = """\
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP(
+    "demo",
+    json_response=True,
+    stateless_http=True,
+    sse_path="/events",
+    transport_security=None,
+)
+"""
+    _, findings, _ = run(before)
+    assert [f.code for f in findings] == ["F009"]
+    for name in ("json_response", "stateless_http", "sse_path", "transport_security"):
+        assert name in findings[0].message
+
+
+def test_constructor_without_transport_kwargs_is_clean() -> None:
+    """Identity and auth parameters stay on the constructor in v2."""
+    before = """\
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("demo", instructions="hi", debug=True, log_level="INFO")
+"""
+    _, findings, changed = run(before)
+    assert changed
+    assert findings == []
+
+
 def test_httpx_in_a_file_that_does_not_touch_mcp_is_not_reported() -> None:
     """Regression: F003 used to fire on any file importing httpx.
 

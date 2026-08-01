@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-codemod"
-version = "0.1.1"
+version = "0.1.2"
 description = "Codemod that migrates MCP Python SDK v1 code to v2 (spec 2026-07-28)."
 readme = "README.md"
 requires-python = ">=3.10"

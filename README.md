@@ -98,6 +98,7 @@ are reported and the source is left unmodified.
 | F006 | Deprecated name (`SUPPORTED_PROTOCOL_VERSIONS`) |
 | F007 | `timedelta` timeout too dynamic to convert safely |
 | F008 | Lowlevel `@server.list_tools()` decorator, now an `on_list_tools=` constructor parameter |
+| F009 | Transport parameter (`host`, `port`, `stateless_http`, others) still on the `MCPServer` constructor |
 
 F001 deserves particular attention. In v1, `model_dump()` emitted camelCase
 because the model fields themselves were camelCase. In v2 the same call emits
@@ -109,6 +110,18 @@ guide describes the consequence directly:
 This is not corrected automatically because the receiver cannot be statically
 proven to be an MCP protocol type. Adding `by_alias=True` to an unrelated
 Pydantic model would corrupt that model's output instead.
+
+F009 is worth reading too. Eleven transport parameters moved off the
+`MCPServer` constructor and onto `run()` in v2, so this still raises
+`TypeError` at startup even after the class is renamed:
+
+```python
+mcp = MCPServer("demo", host="127.0.0.1", port=8788)   # crashes in v2
+```
+
+They are not moved automatically because the destination is a different call
+site, which may be elsewhere in the file, in another module, or absent when
+the server is mounted as an ASGI app.
 
 ## Imports that are intentionally left alone
 

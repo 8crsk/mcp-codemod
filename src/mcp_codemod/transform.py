@@ -29,8 +29,10 @@ from .rules import (
     FIELD_RENAMES,
     MODEL_DUMP_METHODS,
     MODULE_PREFIX_MOVES,
+    MOVED_TRANSPORT_KWARGS,
     REMOVED_NO_REPLACEMENT,
     ROOTMODEL_UNIONS,
+    SERVER_CONSTRUCTORS,
     SYMBOL_RENAMES,
     TIMEDELTA_UNITS,
     TIMEOUT_KWARGS,
@@ -400,6 +402,35 @@ class MCPv2Codemod(cst.CSTTransformer):
         """
         if not self._imports_mcp:
             return
+
+        # Transport parameters left on the server constructor. Detected here,
+        # against the original source, so the v1 spelling is still visible.
+        if (
+            isinstance(node.func, cst.Name)
+            and node.func.value in SERVER_CONSTRUCTORS
+        ):
+            stranded = [
+                arg.keyword.value
+                for arg in node.args
+                if arg.keyword is not None
+                and arg.keyword.value in MOVED_TRANSPORT_KWARGS
+            ]
+            if stranded:
+                detail = "; ".join(
+                    f"{name} -> {MOVED_TRANSPORT_KWARGS[name]}"
+                    for name in stranded
+                )
+                self._report(
+                    "F009",
+                    node,
+                    f"{node.func.value}(...) is passed "
+                    f"{', '.join(repr(s) for s in stranded)}, which moved off "
+                    "the constructor in v2 and now raises TypeError at "
+                    f"startup. Move to: {detail}.",
+                    "transport-specific-parameters-moved-from-mcpserver-"
+                    "constructor-to-runapp-methods",
+                )
+
         if not isinstance(node.func, cst.Attribute):
             return
         if node.func.attr.value not in MODEL_DUMP_METHODS:
