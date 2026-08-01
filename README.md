@@ -184,6 +184,15 @@ mcp-migration scan .   # then check for behavioural hazards
 * Symbol renames are name-based. A local variable named `Content` in a file that
   also imports `mcp` would be renamed. Review the diff.
 * Import order is left untouched. Use `isort` if you need it.
+* **A clean rewrite is not a finished migration.** The findings are not
+  optional extras. A file can be fully rewritten, parse correctly, and still
+  fail at startup because of something reported rather than changed. F009 is
+  the clearest example: rename the class but leave `port=` on the constructor
+  and the server raises `TypeError` the moment it launches. Read the findings
+  before assuming you are done.
+* Correctness is verified by parsing the output and by a test suite, not by
+  executing migrated servers against the v2 SDK. Run your own tests after
+  migrating.
 
 ## Development
 
